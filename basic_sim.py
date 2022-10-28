@@ -35,7 +35,7 @@ def BEE(Q,R,nu,Gamma,A,B,X,Wa,Wc,GR):
 # test using mass spring damper
 if __name__ == '__main__':
     dt = 0.01 # time step
-    tf = 60.0 # final time
+    tf = 240.0 # final time
     t = np.linspace(0.0,tf,int(tf/dt))
     steps = int(tf//dt)
     m = 10.0 # mass
@@ -47,9 +47,9 @@ if __name__ == '__main__':
     A = np.array([[0.0,1.0],[-k/m,-c/m]]) # drift
     B = np.array([0,1.0/m]) # control effectiveness
     Wc = np.zeros((3,len(t))) # critic weights
-    Wc[:,0] = np.random.randn(3)
+    Wc[:,0] = 0.01*np.random.randn(3)
     Wa = np.zeros((3,len(t))) # actor weights
-    Wa[:,0] = np.random.randn(3)
+    Wa[:,0] = 0.01*np.random.randn(3)
     Gamma = 1.0*np.eye(3)
     etac = 0.01
     etaa_1 = 0.01
@@ -59,7 +59,7 @@ if __name__ == '__main__':
     Q = np.diag([0.1,0.05]) # state cost
     R = 0.01 # input cost
     GR = 1.0/R*np.outer(B,B)
-    N = 10 # number of extrapolation points
+    N = 100 # number of extrapolation points
     
     for ii in range(steps):
         X_ii = X[:,ii]
@@ -74,7 +74,7 @@ if __name__ == '__main__':
         Gamma_BE = 1.0/(rho_ii**2)*np.outer(omega_ii,omega_ii)
 
         for jj in range(N):
-            X_jj = X_ii + 0.1*np.random.randn(2) # random point around X
+            X_jj = X_ii + 2.0*np.random.randn(2) # random point around X
             _,omega_jj,rho_jj,delta_jj,Gphi_jj = BEE(Q,R,nu,Gamma,A,B,X_jj,Wa_ii,Wc_ii,GR)
             Wc_BE += delta_jj/rho_jj*omega_jj
             Wa_BE += 1.0/(4.0*rho_jj)*Gphi_jj.T@np.outer(Wa_ii,omega_jj)@Wc_ii
@@ -139,3 +139,19 @@ if __name__ == '__main__':
     inputax.set_title("Input")
     inputax.grid()
     inputplot.savefig(path+"/input.png")
+
+    #plot the weights
+    acplot,acax = plot.subplots()
+    acax.plot(t,Wa[0,:],color='red',linewidth=2,linestyle='dashed')
+    acax.plot(t,Wa[1,:],color='green',linewidth=2,linestyle='dashed')
+    acax.plot(t,Wa[2,:],color='blue',linewidth=2,linestyle='dashed')
+    acax.plot(t,Wc[0,:],color='red',linewidth=2)
+    acax.plot(t,Wc[1,:],color='green',linewidth=2)
+    acax.plot(t,Wc[2,:],color='blue',linewidth=2)
+    acax.set_xlabel("$t$ $(sec)$")
+    acax.set_ylabel("$W$ $(m)$")
+    acax.set_title("Actor (dashed) Critic (solid) Weights")
+    acax.grid()
+    acplot.savefig(path+"/weights.png")
+
+    print("Gamma: "+str(np.round(Gamma,3)))
