@@ -17,11 +17,12 @@ def grad_phi(X=np.array(2)):
     #[[2x,0],
     # [xD,x],
     # [0,2xD]]
-    rad_phi_ = np.array([[2*X[0],0.0],[X[1],X[0]],[0.0,2*X[1]]])
-    return rad_phi_
+    grad_phi_ = np.array([[2*X[0],0.0],[X[1],X[0]],[0.0,2*X[1]]])
+    return grad_phi_
 
 #bellman error extrapolation
 def BEE(Q,R,nu,Gamma,A,B,X,Wa,Wc,GR):
+    phi_ = phi(X)
     grad_phi_ = grad_phi(X)
     Gphi = grad_phi_@GR@grad_phi_.T
     u = -0.5/R*np.dot(B,grad_phi_.T@Wa)
@@ -30,12 +31,12 @@ def BEE(Q,R,nu,Gamma,A,B,X,Wa,Wc,GR):
     rho = 1.0+nu*np.dot(omega,Gamma@omega)
     r = np.dot(X,Q@X)+R*u**2
     delta = r + np.dot(Wc,omega)
-    return u,omega,rho,delta,Gphi
+    return u,omega,rho,delta,Gphi,phi_
 
 # test using mass spring damper
 if __name__ == '__main__':
     dt = 0.01 # time step
-    tf = 240.0 # final time
+    tf = 15.0 # final time
     t = np.linspace(0.0,tf,int(tf/dt))
     steps = int(tf//dt)
     m = 10.0 # mass
@@ -50,14 +51,14 @@ if __name__ == '__main__':
     Wc[:,0] = 0.01*np.random.randn(3)
     Wa = np.zeros((3,len(t))) # actor weights
     Wa[:,0] = 0.01*np.random.randn(3)
-    Gamma = 1.0*np.eye(3)
-    etac = 0.01
-    etaa_1 = 0.01
-    etaa_2 = 0.01
-    lam = 0.01
-    nu = 0.01
+    Gamma = 50.0*np.eye(3)
+    etac = 0.5 #
+    etaa_1 = 2.0 # gain on difference between Wa and Wc
+    etaa_2 = 0.001 # gain on Wa
+    lam = 0.1 # gain for Gamma on Gamma
+    nu = 0.005 
     Q = np.diag([0.1,0.05]) # state cost
-    R = 0.01 # input cost
+    R = 0.001 # input cost
     GR = 1.0/R*np.outer(B,B)
     N = 100 # number of extrapolation points
     
@@ -65,7 +66,7 @@ if __name__ == '__main__':
         X_ii = X[:,ii]
         Wc_ii = Wc[:,ii]
         Wa_ii = Wa[:,ii]
-        u_ii,omega_ii,rho_ii,delta_ii,Gphi_ii = BEE(Q,R,nu,Gamma,A,B,X_ii,Wa_ii,Wc_ii,GR)
+        u_ii,omega_ii,rho_ii,delta_ii,Gphi_ii,phi_ii = BEE(Q,R,nu,Gamma,A,B,X_ii,Wa_ii,Wc_ii,GR)
         XD_ii = A@X_ii + B*u_ii
 
         # extrapolations
@@ -75,7 +76,7 @@ if __name__ == '__main__':
 
         for jj in range(N):
             X_jj = X_ii + 2.0*np.random.randn(2) # random point around X
-            _,omega_jj,rho_jj,delta_jj,Gphi_jj = BEE(Q,R,nu,Gamma,A,B,X_jj,Wa_ii,Wc_ii,GR)
+            _,omega_jj,rho_jj,delta_jj,Gphi_jj,_ = BEE(Q,R,nu,Gamma,A,B,X_jj,Wa_ii,Wc_ii,GR)
             Wc_BE += delta_jj/rho_jj*omega_jj
             Wa_BE += 1.0/(4.0*rho_jj)*Gphi_jj.T@np.outer(Wa_ii,omega_jj)@Wc_ii
             Gamma_BE += 1.0/(rho_jj**2)*np.outer(omega_jj,omega_jj)
@@ -94,12 +95,16 @@ if __name__ == '__main__':
         WcD_ii = -etac/(N+1)*Gamma@Wc_BE
         WaD_ii = -etaa_1*(Wa_ii-Wc_ii)-etaa_2*Wa_ii+etac/(N+1)*Wa_BE
         GammaD = lam*Gamma-etac/(N+1)*Gamma@Gamma_BE@Gamma
+        if t[ii] > 3:
+            b=2
 
         X[:,ii+1] = X_ii + XD_ii*dt
         Wc[:,ii+1] = Wc_ii + WcD_ii*dt
         Wa[:,ii+1] = Wa_ii + WaD_ii*dt
         u[ii] = u_ii
         Gamma += GammaD*dt
+        # Gamma = np.clip(Gamma,0.01,100.0)
+        print("t: "+str(round(t[ii],3))+" X "+str(np.round(X[:,ii],3))+" V "+str(np.round(np.dot(Wc_ii,phi_ii),3)))
     X_f = X[:,-1]
     phi_f = phi(X_f)
     grad_phi_f = grad_phi(X_f)
