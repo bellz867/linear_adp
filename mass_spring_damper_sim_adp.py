@@ -4,7 +4,7 @@ import matplotlib.pyplot as plot
 import os
 import datetime
 
-np.random.seed(0)
+np.random.seed()
 
 # basis
 def phi(X=np.array(2)):
@@ -19,6 +19,20 @@ def grad_phi(X=np.array(2)):
     # [0,2xD]]
     grad_phi_ = np.array([[2*X[0],0.0],[X[1],X[0]],[0.0,2*X[1]]])
     return grad_phi_
+
+# def f(Q,R,nu,Gamma,A,B,X,Wa,Wc,GR,XE):
+
+
+# #classic rk4 method
+# def rk4(self,dt,t,X):
+#     k1,u1 = f(t,X)
+#     k2,u2 = f(t+0.5*dt,X+0.5*dt*k1)
+#     k3,u3 = f(t+0.5*dt,X+0.5*dt*k2)
+#     k4,u4 = f(t+dt,X+dt*k3)
+#     XD = (1.0/6.0)*(k1+2.0*k2+2.0*k3+k4)
+#     um = (1.0/6.0)*(u1+2.0*u2+2.0*u3+u4)
+
+#     return XD,um
 
 #bellman error extrapolation
 def BEE(Q,R,nu,Gamma,A,B,X,Wa,Wc,GR):
@@ -51,35 +65,38 @@ if __name__ == '__main__':
     Wc[:,0] = 0.01*np.random.randn(3)
     Wa = np.zeros((3,len(t))) # actor weights
     Wa[:,0] = 0.01*np.random.randn(3)
-    Gamma = 50.0*np.eye(3)
-    etac = 0.5 #
-    etaa_1 = 2.0 # gain on difference between Wa and Wc
-    etaa_2 = 0.001 # gain on Wa
-    lam = 0.1 # gain for Gamma on Gamma
-    nu = 0.005 
-    Q = np.diag([0.1,0.05]) # state cost
+    Gamma = 100.0*np.eye(3)
+    etac_1 = 0.005 # gain on critic on trajectory
+    etac_2 = 0.1 # gain on critic off trajectory
+    etaa_1 = 10.0 # gain on difference between Wa and Wc
+    etaa_2 = 0.1 # gain on Wa
+    lam = 0.4 # gain for Gamma on Gamma
+    nu = 0.005
+    # Q = np.diag([10.0,5.0]) # state cost
+    Q = np.diag([0.1,0.01]) # state cost
     R = 0.001 # input cost
     GR = 1.0/R*np.outer(B,B)
     N = 100 # number of extrapolation points
+    md_mag = 0.1 # matched disturbance magnitude
     
     for ii in range(steps):
         X_ii = X[:,ii]
         Wc_ii = Wc[:,ii]
         Wa_ii = Wa[:,ii]
         u_ii,omega_ii,rho_ii,delta_ii,Gphi_ii,phi_ii = BEE(Q,R,nu,Gamma,A,B,X_ii,Wa_ii,Wc_ii,GR)
-        XD_ii = A@X_ii + B*u_ii
+        XD_ii = A@X_ii + B*(u_ii+md_mag*np.random.randn(1))
 
         # extrapolations
-        Wc_BE = delta_ii/rho_ii*omega_ii
-        Wa_BE = 1.0/(4.0*rho_ii)*Gphi_ii.T@np.outer(Wa_ii,omega_ii)@Wc_ii
-        Gamma_BE = 1.0/(rho_ii**2)*np.outer(omega_ii,omega_ii)
+        Wc_BE = etac_1*delta_ii/rho_ii*omega_ii
+        Wa_BE = etac_1/(4.0*rho_ii)*Gphi_ii.T@np.outer(Wa_ii,omega_ii)@Wc_ii
+        Gamma_BE = etac_1/(rho_ii**2)*np.outer(omega_ii,omega_ii)
 
         for jj in range(N):
             X_jj = X_ii + 2.0*np.random.randn(2) # random point around X
             _,omega_jj,rho_jj,delta_jj,Gphi_jj,_ = BEE(Q,R,nu,Gamma,A,B,X_jj,Wa_ii,Wc_ii,GR)
-            Wc_BE += delta_jj/rho_jj*omega_jj
-            Wa_BE += 1.0/(4.0*rho_jj)*Gphi_jj.T@np.outer(Wa_ii,omega_jj)@Wc_ii
-            Gamma_BE += 1.0/(rho_jj**2)*np.outer(omega_jj,omega_jj)
+            Wc_BE += etac_2*delta_jj/rho_jj*omega_jj
+            Wa_BE += etac_2/(4.0*rho_jj)*Gphi_jj.T@np.outer(Wa_ii,omega_jj)@Wc_ii
+            Gamma_BE += etac_2/(rho_jj**2)*np.outer(omega_jj,omega_jj)
 
         # Wc_BE = delta_ii/rho_ii**2*omega_ii
         # Wa_BE = 1.0/(4.0*rho_ii**2)*Gphi_ii.T@np.outer(Wa_ii,omega_ii)@Wc_ii
@@ -92,10 +109,11 @@ if __name__ == '__main__':
         #     Wa_BE += 1.0/(4.0*rho_jj**2)*Gphi_jj.T@np.outer(Wa_ii,omega_jj)@Wc_ii
         #     Gamma_BE += 1.0/(rho_jj**2)*np.outer(omega_jj,omega_jj)
 
-        WcD_ii = -etac/(N+1)*Gamma@Wc_BE
-        WaD_ii = -etaa_1*(Wa_ii-Wc_ii)-etaa_2*Wa_ii+etac/(N+1)*Wa_BE
-        GammaD = lam*Gamma-etac/(N+1)*Gamma@Gamma_BE@Gamma
-        if t[ii] > 3:
+        WcD_ii = -1.0/(N+1)*Gamma@Wc_BE
+        WaD_ii = -etaa_1*(Wa_ii-Wc_ii)-etaa_2*Wa_ii+1.0/(N+1)*Wa_BE
+        # WaD_ii = -etaa_1*(Wa_ii-Wc_ii)
+        GammaD = lam*Gamma-1.0/(N+1)*Gamma@Gamma_BE@Gamma
+        if t[ii] > 10:
             b=2
 
         X[:,ii+1] = X_ii + XD_ii*dt
