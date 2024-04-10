@@ -3,8 +3,7 @@ import matplotlib
 import matplotlib.pyplot as plot
 import os
 import datetime
-from scipy.linalg import solve_lyapunov
-from scipy.linalg import solve_discrete_are
+from scipy.linalg import solve_continuous_are
 
 np.random.seed()
 
@@ -24,7 +23,7 @@ if __name__ == '__main__':
     B = np.array([[0],[1.0/m]]) # control effectiveness
     Q = np.diag([0.1,0.01]) # state cost
     R = 0.001 # input cost
-    P = solve_discrete_are(A,B,Q,np.array([R]))
+    P = solve_continuous_are(A,B,Q,np.array([R]))
     K = 1.0/R*(B.T@P)
 
     md_mag = 0.1 # matched disturbance magnitude
